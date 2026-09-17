@@ -15,16 +15,24 @@ jobs:
       - name: Checkout do código
         uses: actions/checkout@v4
 
-      - name: Inspecionar Claims do Token OIDC
+      - name: Diagnóstico Direto STS via AWS CLI
         run: |
-          ID_TOKEN=$(curl -sLS -H "User-Agent: actions/oidc-client" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r '.value')
-          echo "=== PAYLOAD DO TOKEN GERADO PELO GITHUB ==="
-          echo "$ID_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{sub: .sub, aud: .aud, repository: .repository, repository_owner: .repository_owner}'
+          echo "=== 1. OBTENDO TOKEN OIDC DO GITHUB ==="
+          RESP=$(curl -sLS -H "User-Agent: actions/oidc-client" -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")
+          ID_TOKEN=$(echo "$RESP" | jq -r '.value')
 
-      - name: Imprimir sub esperado pelo GitHub       
-        run: |
-          echo "=== COPIE O VALOR ABAIXO ==="
-          echo "repo:${{ github.repository }}:ref:${{ github.ref }}"
+          echo "=== 2. PAYLOAD REAL DO TOKEN (DECODIFICADO) ==="
+          echo "$ID_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{iss: .iss, aud: .aud, sub: .sub, repository: .repository}'
+
+          echo "=== 3. ROLE ARN CONFIGURADO ==="
+          echo "Role: '${{ vars.AWS_ROLE_ARN }}'"
+
+          echo "=== 4. TESTANDO ASSUMEROLE DIRETO NA AWS CLI ==="
+          aws sts assume-role-with-web-identity \
+            --role-arn "${{ vars.AWS_ROLE_ARN }}" \
+            --role-session-name "GitHubTestSession" \
+            --web-identity-token "$ID_TOKEN" \
+            --region "${{ vars.AWS_REGION }}"
 
       - name: 1. Autenticar na AWS via OIDC (AssumeRole)
         uses: aws-actions/configure-aws-credentials@v4
