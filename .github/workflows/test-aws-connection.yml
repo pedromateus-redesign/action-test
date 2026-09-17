@@ -21,6 +21,11 @@ jobs:
           echo "=== PAYLOAD DO TOKEN GERADO PELO GITHUB ==="
           echo "$ID_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{sub: .sub, aud: .aud, repository: .repository, repository_owner: .repository_owner}'
 
+      - name: Imprimir sub esperado pelo GitHub       
+        run: |
+          echo "=== COPIE O VALOR ABAIXO ==="
+          echo "repo:${{ github.repository }}:ref:${{ github.ref }}"
+
       - name: 1. Autenticar na AWS via OIDC (AssumeRole)
         uses: aws-actions/configure-aws-credentials@v4
         with:
