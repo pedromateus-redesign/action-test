@@ -1,0 +1,56 @@
+name: Test AWS & Secrets Connection
+
+on:
+  workflow_dispatch: # Permite disparo manual com um clique na interface do GitHub
+
+permissions:
+  id-token: write  # Obrigatório para autenticação via GitHub OIDC
+  contents: read
+
+jobs:
+  validate-aws-connectivity:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: 1. Autenticar na AWS via OIDC (AssumeRole)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      - name: 2. Validar Identidade Assumida (STS)
+        run: |
+          echo "=== Identidade AWS Conectada ==="
+          aws sts get-caller-identity
+
+      - name: 3. Testar Leitura do AWS SSM Parameter Store
+        run: |
+          echo "=== Consultando caminhos do SSM ==="
+          # Lista os nomes dos parâmetros existentes sob /radar/hom/ sem exibir os valores sensíveis
+          aws ssm get-parameters-by-path \
+            --path "/radar/hom/" \
+            --recursive \
+            --query "Parameters[*].Name" \
+            --output table
+
+      # Executar apenas se for o repositório do Back-end (oficina-radar-python)
+      - name: 4. Validar Acesso à Função Lambda (Back-end)
+        if: env.FUNCTION_NAME != ''
+        env:
+          FUNCTION_NAME: ${{ vars.LAMBDA_FUNCTION_NAME }}
+        run: |
+          echo "=== Verificando Função Lambda: $FUNCTION_NAME ==="
+          aws lambda get-function --function-name "$FUNCTION_NAME" --query "Configuration.FunctionArn" --output text
+
+      # Executar apenas se for o repositório do Front-end (oficina-radar-v2)
+      - name: 5. Validar Acesso ao App Amplify (Front-end)
+        if: env.APP_ID != ''
+        env:
+          APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+        run: |
+          echo "=== Verificando App Amplify: $APP_ID ==="
+          aws amplify get-app --app-id "$APP_ID" --query "app.name" --output text
